@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPR/GPS Visualization</title>
+    
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+            crossorigin=""></script>
+
+    <!-- App Scripts -->
+    <script type="module" src="scripts/main.js"></script>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+          crossorigin="">
+    
+    <!-- App CSS -->
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>GPR/GPS Visualization</h1>
+            <span class="app-subtitle">Ground Penetrating Radar & GPS Track Viewer</span>
+        </header>
+
+        <!-- Main Content - Three Column Layout -->
+        <main class="main-content">
+            <!-- Left Sidebar - Query Parameters -->
+            <aside class="filter-panel">
+                <h2>Query Parameters</h2>
+                
+                <form id="query-form">
+                    <!-- Date Selection -->
+                    <div class="form-group">
+                        <label for="date-select">Date</label>
+                        <input type="date" id="date-select" name="date" required>
+                    </div>
+
+                    <!-- Start Location -->
+                    <fieldset class="location-group">
+                        <legend>Start Location</legend>
+                        <div class="form-group">
+                            <label for="start-lat">Latitude</label>
+                            <input type="number" id="start-lat" name="start_lat" 
+                                   step="0.0001" placeholder="e.g., 42.9500" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="start-lon">Longitude</label>
+                            <input type="number" id="start-lon" name="start_lon" 
+                                   step="0.0001" placeholder="e.g., -81.2500" required>
+                        </div>
+                    </fieldset>
+
+                    <!-- End Location -->
+                    <fieldset class="location-group">
+                        <legend>End Location</legend>
+                        <div class="form-group">
+                            <label for="end-lat">Latitude</label>
+                            <input type="number" id="end-lat" name="end_lat" 
+                                   step="0.0001" placeholder="e.g., 43.0000" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="end-lon">Longitude</label>
+                            <input type="number" id="end-lon" name="end_lon" 
+                                   step="0.0001" placeholder="e.g., -81.1500" required>
+                        </div>
+                    </fieldset>
+
+                    <button type="submit" class="btn btn-primary">Load GPR Data</button>
+                    <button type="button" id="load-sample-btn" class="btn btn-secondary">Load Sample Data</button>
+                </form>
+
+                <!-- Colorscale Selector -->
+                <div class="form-group" style="margin-top: 16px;">
+                    <label for="colorscale-select">Color Scale</label>
+                    <select id="colorscale-select" class="viewer-select">
+                        <option value="RdBu">Red-Blue (Seismic)</option>
+                        <option value="Greys">Grayscale</option>
+                        <option value="Viridis">Viridis</option>
+                        <option value="Hot">Hot</option>
+                        <option value="Jet">Jet</option>
+                        <option value="Portland">Portland</option>
+                    </select>
+                </div>
+
+                <!-- POI Panel -->
+                <div class="poi-panel">
+                    <h3>Points of Interest</h3>
+                    <p class="poi-instruction">Click on slice view to mark POI</p>
+                    <div id="poi-list" class="poi-list">
+                        <!-- POIs will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Legend -->
+                <div class="legend-panel">
+                    <h3>Track Info</h3>
+                    <div id="track-info" class="track-info">
+                        <p>Distance: <span id="track-distance">--</span></p>
+                        <p>Points: <span id="track-points">--</span></p>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center - Dual GPR Slice Viewers -->
+            <section class="viewers-section">
+                <!-- Shared Controls Bar -->
+                <div class="controls-bar">
+                    <!-- Viewer Selector -->
+                    <div class="control-group">
+                        <label class="control-label">Active:</label>
+                        <select id="active-viewer-select" class="viewer-select">
+                            <option value="both">Both Viewers</option>
+                            <option value="viewer1">Viewer 1 (Top)</option>
+                            <option value="viewer2">Viewer 2 (Bottom)</option>
+                        </select>
+                    </div>
+
+                    <!-- Sync Toggle -->
+                    <div class="control-group">
+                        <button id="sync-viewers-btn" class="btn btn-toggle active" title="Sync Viewers">
+                            🔗 Sync
+                        </button>
+                    </div>
+
+                    <!-- Reset Zoom -->
+                    <div class="control-group">
+                        <button id="zoom-reset" class="btn btn-small" title="Reset Zoom">Reset View</button>
+                    </div>
+
+                    <!-- POI Mode Toggle -->
+                    <div class="control-group poi-controls">
+                        <button id="poi-mode-toggle" class="btn btn-toggle" title="Toggle POI Mode">
+                            📍 Mark POI
+                        </button>
+                        <select id="poi-type-select" class="poi-type-dropdown">
+                            <option value="culvert">Culvert</option>
+                            <option value="pipe">Pipe</option>
+                            <option value="void">Void</option>
+                            <option value="anomaly">Anomaly</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Dual Viewer Container -->
+                <div class="dual-viewer-container">
+                    <!-- Viewer 1 (Top) -->
+                    <div class="viewer-wrapper" id="viewer1-wrapper">
+                        <div class="viewer-header">
+                            <span class="viewer-title">GPR Slice View 1</span>
+                            <span class="viewer-info" id="viewer1-info">--</span>
+                        </div>
+                        <div class="plotly-container" id="plotly-container-1">
+                            <div id="gpr-plot-1" class="gpr-plot"></div>
+                            <div id="loading-overlay-1" class="loading-overlay hidden">
+                                <div class="spinner"></div>
+                                <span>Loading...</span>
+                            </div>
+                            <div id="placeholder-1" class="placeholder">
+                                <p>Load data to view GPR slice</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Viewer Divider -->
+                    <div class="viewer-divider"></div>
+
+                    <!-- Viewer 2 (Bottom) -->
+                    <div class="viewer-wrapper" id="viewer2-wrapper">
+                        <div class="viewer-header">
+                            <span class="viewer-title">GPR Slice View 2</span>
+                            <span class="viewer-info" id="viewer2-info">--</span>
+                        </div>
+                        <div class="plotly-container" id="plotly-container-2">
+                            <div id="gpr-plot-2" class="gpr-plot"></div>
+                            <div id="loading-overlay-2" class="loading-overlay hidden">
+                                <div class="spinner"></div>
+                                <span>Loading...</span>
+                            </div>
+                            <div id="placeholder-2" class="placeholder">
+                                <p>Load data to view GPR slice</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Info Bar -->
+                <div class="info-bar">
+                    <span id="cursor-position">Position: --</span>
+                    <span id="depth-display">Depth: --</span>
+                    <span id="coordinates-display">Coordinates: --</span>
+                    <span id="mile-marker">Mile: --</span>
+                </div>
+            </section>
+
+            <!-- Right - Map Panel -->
+            <aside class="map-panel">
+                <div class="map-header">
+                    <h3>GPS Track Map</h3>
+                    <div class="map-controls">
+                        <button id="map-fit-bounds" class="btn btn-small" title="Fit to Track">⊡ Fit</button>
+                        <button id="map-toggle-markers" class="btn btn-small" title="Toggle Markers">📍</button>
+                    </div>
+                </div>
+                <div id="map-container" class="map-container">
+                    <!-- Leaflet map will be initialized here -->
+                </div>
+                <div class="map-info">
+                    <span id="map-cursor-coords">Hover: --</span>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Status Bar -->
+        <footer class="status-bar">
+            <span id="status-message">Ready - Click "Load Sample Data" to test</span>
+            <span id="connection-status" class="connection-indicator">● Demo Mode</span>
+        </footer>
+    </div>
+
+
+</body>
+</html>
