@@ -33,11 +33,16 @@ export class Controls {
             // Query form
             queryForm: document.getElementById('query-form'),
             loadSampleBtn: document.getElementById('load-sample-btn'),
+            queryMode: document.getElementById('query-mode'),
             dateSelect: document.getElementById('date-select'),
             startLat: document.getElementById('start-lat'),
             startLon: document.getElementById('start-lon'),
             endLat: document.getElementById('end-lat'),
             endLon: document.getElementById('end-lon'),
+            startMileage: document.getElementById('start-mileage'),
+            endMileage: document.getElementById('end-mileage'),
+            latLngRange: document.getElementById('latlng-range'),
+            mileageRange: document.getElementById('mileage-range'),
             
             // Info displays
             cursorPosition: document.getElementById('cursor-position'),
@@ -179,21 +184,54 @@ export class Controls {
             e.preventDefault();
             this.handleQuerySubmit();
         });
+
+        this.elements.queryMode?.addEventListener('change', () => {
+            this.toggleQueryModeUI();
+        });
         
         this.elements.loadSampleBtn?.addEventListener('click', () => {
             if (this.onLoadSample) {
                 this.onLoadSample();
             }
         });
+
+        this.toggleQueryModeUI();
+    }
+
+    toggleQueryModeUI() {
+        const mode = this.elements.queryMode?.value || 'latlng';
+        if (mode === 'mileage') {
+            this.elements.latLngRange?.classList.add('hidden');
+            this.elements.mileageRange?.classList.remove('hidden');
+            if (this.elements.startLat) this.elements.startLat.disabled = true;
+            if (this.elements.startLon) this.elements.startLon.disabled = true;
+            if (this.elements.endLat) this.elements.endLat.disabled = true;
+            if (this.elements.endLon) this.elements.endLon.disabled = true;
+            if (this.elements.startMileage) this.elements.startMileage.disabled = false;
+            if (this.elements.endMileage) this.elements.endMileage.disabled = false;
+        } else {
+            this.elements.latLngRange?.classList.remove('hidden');
+            this.elements.mileageRange?.classList.add('hidden');
+            if (this.elements.startLat) this.elements.startLat.disabled = false;
+            if (this.elements.startLon) this.elements.startLon.disabled = false;
+            if (this.elements.endLat) this.elements.endLat.disabled = false;
+            if (this.elements.endLon) this.elements.endLon.disabled = false;
+            if (this.elements.startMileage) this.elements.startMileage.disabled = true;
+            if (this.elements.endMileage) this.elements.endMileage.disabled = true;
+        }
     }
     
     handleQuerySubmit() {
+        const queryMode = this.elements.queryMode?.value || 'latlng';
         const params = {
             date: this.elements.dateSelect?.value,
+            queryMode,
             startLat: parseFloat(this.elements.startLat?.value),
             startLon: parseFloat(this.elements.startLon?.value),
             endLat: parseFloat(this.elements.endLat?.value),
-            endLon: parseFloat(this.elements.endLon?.value)
+            endLon: parseFloat(this.elements.endLon?.value),
+            startMileage: parseFloat(this.elements.startMileage?.value),
+            endMileage: parseFloat(this.elements.endMileage?.value)
         };
         
         if (!params.date) {
@@ -201,10 +239,17 @@ export class Controls {
             return;
         }
         
-        if (isNaN(params.startLat) || isNaN(params.startLon) || 
-            isNaN(params.endLat) || isNaN(params.endLon)) {
-            this.showError('Please enter valid coordinates');
-            return;
+        if (queryMode === 'mileage') {
+            if (isNaN(params.startMileage) || isNaN(params.endMileage)) {
+                this.showError('Please enter valid mileage values');
+                return;
+            }
+        } else {
+            if (isNaN(params.startLat) || isNaN(params.startLon) || 
+                isNaN(params.endLat) || isNaN(params.endLon)) {
+                this.showError('Please enter valid coordinates');
+                return;
+            }
         }
         
         if (this.onQuerySubmit) {

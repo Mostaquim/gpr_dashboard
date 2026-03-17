@@ -34,6 +34,13 @@ async function fetchAPI(endpoint, options = {}) {
     }
 }
 
+async function postAPI(endpoint, body) {
+    return fetchAPI(endpoint, {
+        method: 'POST',
+        body: JSON.stringify(body || {})
+    });
+}
+
 /**
  * Build query string from parameters object
  */
@@ -61,17 +68,27 @@ export async function getAvailableDates() {
  */
 export async function getGPRSlice(params) {
     const { date, startLat, startLon, endLat, endLon, zoomLevel = 1 } = params;
-    
-    const queryString = buildQueryString({
+
+    return postAPI('/gpr/query-latlng', {
         date,
-        start_lat: startLat,
-        start_lon: startLon,
-        end_lat: endLat,
-        end_lon: endLon,
-        zoom_level: zoomLevel
+        zoom_level: zoomLevel,
+        filters: ['raw'],
+        startpoint: { lat: startLat, lng: startLon },
+        endpoint: { lat: endLat, lng: endLon }
     });
-    
-    return fetchAPI(`/gpr/slice${queryString}`);
+}
+
+/**
+ * Query GPR slice using mileage start/end
+ */
+export async function getGPRByMileage(params) {
+    const { date, startMileage, endMileage, filters = ['raw'] } = params;
+    return postAPI('/gpr/query-mileage', {
+        date,
+        start_mileage: startMileage,
+        end_mileage: endMileage,
+        filters
+    });
 }
 
 /**
@@ -108,10 +125,7 @@ export async function getLocationAtTime(date, time) {
  * Create a new POI
  */
 export async function createPOI(poiData) {
-    return fetchAPI('/poi/', {
-        method: 'POST',
-        body: JSON.stringify(poiData)
-    });
+    return postAPI('/poi', poiData);
 }
 
 /**
@@ -126,33 +140,39 @@ export async function getPOIs(filters = {}) {
  * Get a specific POI by ID
  */
 export async function getPOI(poiId) {
-    return fetchAPI(`/poi/${poiId}`);
+    return fetchAPI(`/poi/${encodeURIComponent(poiId)}`);
 }
 
 /**
  * Update a POI
  */
 export async function updatePOI(poiId, updateData) {
-    return fetchAPI(`/poi/${poiId}`, {
-        method: 'PUT',
-        body: JSON.stringify(updateData)
-    });
+    return Promise.reject(new Error('POI update is not implemented on backend yet'));
 }
 
 /**
  * Delete a POI
  */
 export async function deletePOI(poiId) {
-    return fetchAPI(`/poi/${poiId}`, {
+    return fetchAPI(`/poi/${encodeURIComponent(poiId)}`, {
         method: 'DELETE'
     });
+}
+
+/**
+ * Export all POIs for a date to a separate labels file
+ */
+export async function exportPOIs(date, pois) {
+    return postAPI('/poi/export', { date, pois });
 }
 
 /**
  * Get available POI types
  */
 export async function getPOITypes() {
-    return fetchAPI('/poi/types/list');
+    return {
+        types: ['culvert', 'pipe', 'void', 'anomaly', 'other']
+    };
 }
 
 // ===========================

@@ -21,6 +21,8 @@ class GPRApp {
         this.gpsTrack = null;
         this.pois = [];
         this.poiCounter = 100; // For generating unique IDs
+        this.availableDates = [];
+        this.currentDateIndex = -1;
         
         this.init();
     }
@@ -41,6 +43,7 @@ class GPRApp {
         
         // Check backend connection
         await this.checkConnection();
+        await this.loadAvailableDates();
         
         console.log('App initialized successfully');
         this.controls.setStatus('Ready - Click "Load Sample Data" to test');
@@ -129,6 +132,104 @@ class GPRApp {
                 this.viewer1.syncViewport(viewport.eventData);
             }
         };
+
+        // Dataset date navigation for multi-file workflows.
+        const prevDateBtn = document.getElementById('prev-date-btn');
+        const nextDateBtn = document.getElementById('next-date-btn');
+        prevDateBtn?.addEventListener('click', () => this.loadAdjacentDate(-1));
+        nextDateBtn?.addEventListener('click', () => this.loadAdjacentDate(1));
+
+        const exportPoiBtn = document.getElementById('export-poi-btn');
+        exportPoiBtn?.addEventListener('click', async () => {
+            await this.exportCurrentPOIs();
+        });
+
+        const dateInput = document.getElementById('date-select');
+        dateInput?.addEventListener('change', async (e) => {
+            const date = e.target?.value;
+            if (date) {
+                await this.populateBoundsForDate(date);
+            }
+        });
+    }
+
+    async loadAvailableDates() {
+        try {
+            const result = await api.getAvailableDates();
+            this.availableDates = result?.dates || [];
+            if (this.availableDates.length === 0) return;
+
+            const dateInput = document.getElementById('date-select');
+            if (dateInput && !dateInput.value) {
+                dateInput.value = this.availableDates[this.availableDates.length - 1];
+            }
+
+            const selectedDate = dateInput?.value;
+            if (selectedDate) {
+                await this.populateBoundsForDate(selectedDate);
+            }
+            this.currentDateIndex = this.availableDates.indexOf(selectedDate);
+            if (this.currentDateIndex < 0) {
+                this.currentDateIndex = this.availableDates.length - 1;
+            }
+        } catch (error) {
+            console.warn('Could not load available dates:', error);
+        }
+    }
+
+    async populateBoundsForDate(date) {
+        try {
+            const bounds = await api.getDataBounds(date);
+            const setValue = (id, value) => {
+                const el = document.getElementById(id);
+                if (el && Number.isFinite(value)) {
+                    el.value = Number(value).toFixed(6);
+                }
+            };
+
+            setValue('start-lat', bounds.min_lat);
+            setValue('start-lon', bounds.min_lon);
+            setValue('end-lat', bounds.max_lat);
+            setValue('end-lon', bounds.max_lon);
+            setValue('start-mileage', bounds.min_mileage);
+            setValue('end-mileage', bounds.max_mileage);
+        } catch (error) {
+            console.warn('Could not populate bounds for date:', error);
+        }
+    }
+
+    async loadAdjacentDate(delta) {
+        if (!this.availableDates.length || !this.currentData) {
+            this.controls.setStatus('Load a dataset first before using previous/next date');
+            return;
+        }
+
+        const nextIndex = this.currentDateIndex + delta;
+        if (nextIndex < 0 || nextIndex >= this.availableDates.length) {
+            this.controls.setStatus('No more dates in that direction');
+            return;
+        }
+
+        this.currentDateIndex = nextIndex;
+        const nextDate = this.availableDates[this.currentDateIndex];
+        const dateInput = document.getElementById('date-select');
+        if (dateInput) {
+            dateInput.value = nextDate;
+        }
+
+        // Reuse current query coordinates so date-switching is one click.
+        const params = {
+            date: nextDate,
+            queryMode: document.getElementById('query-mode')?.value || 'latlng',
+            startLat: parseFloat(document.getElementById('start-lat')?.value),
+            startLon: parseFloat(document.getElementById('start-lon')?.value),
+            endLat: parseFloat(document.getElementById('end-lat')?.value),
+            endLon: parseFloat(document.getElementById('end-lon')?.value),
+            startMileage: parseFloat(document.getElementById('start-mileage')?.value),
+            endMileage: parseFloat(document.getElementById('end-mileage')?.value)
+        };
+
+        await this.loadData(params);
     }
     
     /**
@@ -173,6 +274,11 @@ class GPRApp {
         
         // Add to POI list
         this.pois.push(newPOI);
+
+        // Persist labels to separate backend-managed file.
+        api.createPOI({ ...newPOI, date: this.currentData?.date }).catch((error) => {
+            console.warn('Failed to persist POI to backend:', error);
+        });
         
         // Update both viewers
         this.viewer1.setPOIs(this.pois);
@@ -264,6 +370,10 @@ class GPRApp {
         if (index < 0 || index >= this.pois.length) return;
         
         const deleted = this.pois.splice(index, 1)[0];
+
+        api.deletePOI(deleted.id).catch((error) => {
+            console.warn('Failed to delete POI from backend:', error);
+        });
         
         // Update viewers
         this.viewer1.setPOIs(this.pois);
@@ -288,6 +398,20 @@ class GPRApp {
             }
         } catch (error) {
             this.controls.setConnectionStatus('● Demo Mode');
+        }
+    }
+
+    async exportCurrentPOIs() {
+        if (!this.currentData) {
+            this.controls.setStatus('Load data before exporting POIs');
+            return;
+        }
+
+        try {
+            const result = await api.exportPOIs(this.currentData.date, this.pois);
+            this.controls.setStatus(`Exported ${result.count} labels to ${result.file}`);
+        } catch (error) {
+            this.controls.setStatus(`POI export failed: ${error.message}`);
         }
     }
     
@@ -366,26 +490,40 @@ class GPRApp {
         
         try {
             // Try to fetch from backend
-            const gprData = await api.getGPRSlice(params);
-            const gpsData = await api.getGPSTrack(params);
+            const gprData = params.queryMode === 'mileage'
+                ? await api.getGPRByMileage(params)
+                : await api.getGPRSlice(params);
             
             // Load into viewers
             this.viewer1.loadData(gprData);
             this.viewer2.loadData(gprData);
+
+            this.currentData = gprData;
+            this.gpsTrack = gprData.gps_track || [];
             
             // Load GPS track into map
-            if (gpsData.points) {
-                this.mapManager.loadTrack(gpsData.points);
+            if (gprData.gps_track) {
+                this.mapManager.loadTrack(gprData.gps_track);
             }
+
+            this.currentDateIndex = this.availableDates.indexOf(params.date);
             
             this.controls.hideLoading();
             this.controls.hidePlaceholders();
             this.controls.setStatus(`Loaded data for ${params.date}`);
+
+            const trackInfo = this.mapManager.getTrackInfo();
+            if (trackInfo) {
+                this.controls.updateTrackInfo(trackInfo);
+            }
+
+            this.controls.updateViewerInfo(1, `${gprData.width}x${gprData.height} | API Query`);
+            this.controls.updateViewerInfo(2, `${gprData.width}x${gprData.height} | API Query`);
             
         } catch (error) {
-            console.warn('Backend not available, falling back to sample data');
-            this.controls.setStatus('Backend unavailable - loading sample data');
-            this.loadSampleData();
+            console.warn('Backend query failed:', error);
+            this.controls.hideLoading();
+            this.controls.setStatus(`Query failed: ${error.message}`);
         }
     }
     

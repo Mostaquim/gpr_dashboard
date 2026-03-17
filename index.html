@@ -45,8 +45,16 @@
                         <input type="date" id="date-select" name="date" required>
                     </div>
 
+                    <div class="form-group">
+                        <label for="query-mode">Query Mode</label>
+                        <select id="query-mode" class="viewer-select">
+                            <option value="latlng">Latitude/Longitude</option>
+                            <option value="mileage">Mileage Range</option>
+                        </select>
+                    </div>
+
                     <!-- Start Location -->
-                    <fieldset class="location-group">
+                    <fieldset class="location-group" id="latlng-range">
                         <legend>Start Location</legend>
                         <div class="form-group">
                             <label for="start-lat">Latitude</label>
@@ -75,6 +83,23 @@
                         </div>
                     </fieldset>
 
+                    <fieldset class="location-group hidden" id="mileage-range">
+                        <legend>Mileage Range</legend>
+                        <div class="form-group">
+                            <label for="start-mileage">Start Mileage</label>
+                            <input type="number" id="start-mileage" step="0.0001" placeholder="e.g., 29.80">
+                        </div>
+                        <div class="form-group">
+                            <label for="end-mileage">End Mileage</label>
+                            <input type="number" id="end-mileage" step="0.0001" placeholder="e.g., 29.95">
+                        </div>
+                    </fieldset>
+
+                    <div class="control-group" style="margin-bottom: 12px;">
+                        <button type="button" id="prev-date-btn" class="btn btn-small" title="Previous date">Previous Date</button>
+                        <button type="button" id="next-date-btn" class="btn btn-small" title="Next date">Next Date</button>
+                    </div>
+
                     <button type="submit" class="btn btn-primary">Load GPR Data</button>
                     <button type="button" id="load-sample-btn" class="btn btn-secondary">Load Sample Data</button>
                 </form>
@@ -96,6 +121,7 @@
                 <div class="poi-panel">
                     <h3>Points of Interest</h3>
                     <p class="poi-instruction">Click on slice view to mark POI</p>
+                    <button type="button" id="export-poi-btn" class="btn btn-small" style="margin-bottom: 8px;">Export Labels</button>
                     <div id="poi-list" class="poi-list">
                         <!-- POIs will be populated here -->
                     </div>
